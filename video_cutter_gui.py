@@ -31,6 +31,7 @@ class VideoCutterGUI:
         self.output_video_path = tk.StringVar()
         self.segments_text = tk.StringVar()
         self.processing_mode = tk.StringVar(value="balanced")  # Default: balanced
+        self.remove_audio = tk.BooleanVar(value=False)  # Default: keep audio
         self.is_processing = False
 
         # Setup UI
@@ -183,8 +184,22 @@ class VideoCutterGUI:
         )
         mode_explain.pack(anchor=tk.W, pady=(5, 0))
 
-        # ===== PREVIEW INFO =====
+        # ===== AUDIO OPTIONS =====
         row += 2
+        audio_frame = ttk.Frame(main_frame)
+        audio_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 10))
+
+        ttk.Label(audio_frame, text="🔊 Tùy chọn âm thanh:", font=("Arial", 10, "bold")).pack(anchor=tk.W)
+
+        audio_checkbox = ttk.Checkbutton(
+            audio_frame,
+            text="🔇 Tắt âm thanh (tạo video silent - không có tiếng)",
+            variable=self.remove_audio
+        )
+        audio_checkbox.pack(anchor=tk.W, pady=(5, 0))
+
+        # ===== PREVIEW INFO =====
+        row += 1
         ttk.Label(main_frame, text="📊 Thông tin:", font=("Arial", 10, "bold")).grid(
             row=row, column=0, sticky=tk.W, pady=(10, 5)
         )
@@ -381,8 +396,9 @@ class VideoCutterGUI:
             messagebox.showerror("Lỗi định dạng", f"Định dạng đoạn cắt không hợp lệ:\n\n{str(e)}")
             return
 
-        # Get processing mode
+        # Get processing mode and audio option
         mode = self.processing_mode.get()
+        remove_audio = self.remove_audio.get()
 
         # Start processing in background thread
         self.is_processing = True
@@ -395,17 +411,18 @@ class VideoCutterGUI:
             'balanced': '⚡ BALANCED MODE',
             'accurate': '🎯 ACCURATE MODE'
         }
-        self.progress_label.config(text=f"⏳ Đang xử lý ({mode_names.get(mode, mode)})...")
+        audio_status = "🔇 Silent" if remove_audio else "🔊 Có âm thanh"
+        self.progress_label.config(text=f"⏳ Đang xử lý ({mode_names.get(mode, mode)} - {audio_status})...")
 
         # Run in thread
         thread = threading.Thread(
             target=self.process_video,
-            args=(input_path, segments, output_path, mode),
+            args=(input_path, segments, output_path, mode, remove_audio),
             daemon=True
         )
         thread.start()
 
-    def process_video(self, input_path, segments, output_path, mode):
+    def process_video(self, input_path, segments, output_path, mode, remove_audio):
         """Xử lý video (chạy trong thread riêng)"""
         try:
             # Progress callback để cập nhật UI
@@ -421,6 +438,7 @@ class VideoCutterGUI:
                 temp_dir="temp_segments_gui",
                 mode=mode,
                 max_workers=None,  # Auto-detect
+                remove_audio=remove_audio,
                 progress_callback=progress_callback
             )
 
