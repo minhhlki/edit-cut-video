@@ -122,6 +122,31 @@ Các đoạn được phân cách bằng dấu `|`:
 start1-end1|start2-end2|start3-end3
 ```
 
+### ⚡ Chế độ xử lý (Performance Modes)
+
+Tool hỗ trợ 3 chế độ tốc độ khác nhau:
+
+| Chế độ | Tốc độ | Chính xác | Khi nào dùng |
+|--------|--------|-----------|--------------|
+| 🚀 **Fast** | Rất nhanh (10-20x) | ⚠️ ±1-2s | Test nhanh, video không quan trọng |
+| ⚡ **Balanced** | Nhanh (3-4x) | ✅ 100% | **KHUYẾN NGHỊ** - Dùng cho hầu hết trường hợp |
+| 🎯 **Accurate** | Chậm nhất | ✅ 100% | Video CỰC quan trọng |
+
+**Ví dụ sử dụng với mode:**
+
+```bash
+# Fast mode - Nhanh nhất
+python video_cutter.py -i input.mp4 -s "segments" -o output.mp4 --mode fast
+
+# Balanced mode - Mặc định (khuyến nghị)
+python video_cutter.py -i input.mp4 -s "segments" -o output.mp4
+
+# Accurate mode - Chính xác nhất
+python video_cutter.py -i input.mp4 -s "segments" -o output.mp4 --mode accurate
+```
+
+📖 **Chi tiết về hiệu suất**: Xem [PERFORMANCE.md](PERFORMANCE.md)
+
 ## 📝 Ví dụ
 
 ### Ví dụ 1: Cắt 3 đoạn từ video dài

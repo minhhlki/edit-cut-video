@@ -12,7 +12,10 @@ import threading
 from pathlib import Path
 
 # Import functions từ video_cutter
-from video_cutter import parse_segments, parse_time_to_seconds, format_duration, check_ffmpeg
+from video_cutter import (
+    parse_segments, parse_time_to_seconds, format_duration,
+    check_ffmpeg, cut_video_segments
+)
 import subprocess
 
 
@@ -27,6 +30,7 @@ class VideoCutterGUI:
         self.input_video_path = tk.StringVar()
         self.output_video_path = tk.StringVar()
         self.segments_text = tk.StringVar()
+        self.processing_mode = tk.StringVar(value="balanced")  # Default: balanced
         self.is_processing = False
 
         # Setup UI
@@ -138,6 +142,46 @@ class VideoCutterGUI:
 
         browse_output_btn = ttk.Button(output_frame, text="Chọn nơi lưu", command=self.browse_output_video)
         browse_output_btn.grid(row=0, column=1)
+
+        # ===== PROCESSING MODE =====
+        row += 2
+        ttk.Label(main_frame, text="⚙️ Chế độ xử lý:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky=tk.W, pady=(10, 5)
+        )
+
+        mode_frame = ttk.LabelFrame(main_frame, text="Chọn chế độ tốc độ", padding="10")
+        mode_frame.grid(row=row+1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+
+        # Radio buttons for mode selection
+        ttk.Radiobutton(
+            mode_frame,
+            text="🚀 Fast - Rất nhanh (có thể sai lệch 1-2s, dùng khi không cần chính xác tuyệt đối)",
+            variable=self.processing_mode,
+            value="fast"
+        ).pack(anchor=tk.W, pady=2)
+
+        ttk.Radiobutton(
+            mode_frame,
+            text="⚡ Balanced - Cân bằng (nhanh + chính xác, KHUYẾN NGHỊ)",
+            variable=self.processing_mode,
+            value="balanced"
+        ).pack(anchor=tk.W, pady=2)
+
+        ttk.Radiobutton(
+            mode_frame,
+            text="🎯 Accurate - Chính xác tuyệt đối (chậm nhất, cho video quan trọng)",
+            variable=self.processing_mode,
+            value="accurate"
+        ).pack(anchor=tk.W, pady=2)
+
+        # Mode explanation
+        mode_explain = ttk.Label(
+            mode_frame,
+            text="💡 Mẹo: Dùng Fast để kiểm tra nhanh, Balanced cho hầu hết trường hợp, Accurate cho video quan trọng",
+            font=("Arial", 8),
+            foreground="gray"
+        )
+        mode_explain.pack(anchor=tk.W, pady=(5, 0))
 
         # ===== PREVIEW INFO =====
         row += 2
@@ -337,92 +381,48 @@ class VideoCutterGUI:
             messagebox.showerror("Lỗi định dạng", f"Định dạng đoạn cắt không hợp lệ:\n\n{str(e)}")
             return
 
+        # Get processing mode
+        mode = self.processing_mode.get()
+
         # Start processing in background thread
         self.is_processing = True
         self.process_btn.config(state="disabled")
         self.cancel_btn.config(state="normal")
         self.progress_bar.start(10)
-        self.progress_label.config(text="⏳ Đang xử lý...")
+
+        mode_names = {
+            'fast': '🚀 FAST MODE',
+            'balanced': '⚡ BALANCED MODE',
+            'accurate': '🎯 ACCURATE MODE'
+        }
+        self.progress_label.config(text=f"⏳ Đang xử lý ({mode_names.get(mode, mode)})...")
 
         # Run in thread
         thread = threading.Thread(
             target=self.process_video,
-            args=(input_path, segments, output_path),
+            args=(input_path, segments, output_path, mode),
             daemon=True
         )
         thread.start()
 
-    def process_video(self, input_path, segments, output_path):
+    def process_video(self, input_path, segments, output_path, mode):
         """Xử lý video (chạy trong thread riêng)"""
         try:
-            temp_dir = "temp_segments_gui"
-            os.makedirs(temp_dir, exist_ok=True)
+            # Progress callback để cập nhật UI
+            def progress_callback(message):
+                if self.is_processing:  # Chỉ update nếu chưa bị hủy
+                    self.update_progress(message)
 
-            segment_files = []
-            total_segments = len(segments)
-
-            self.update_progress(f"📹 Đang cắt {total_segments} đoạn video...")
-
-            # Cut segments
-            for idx, (start_time, end_time) in enumerate(segments, 1):
-                if not self.is_processing:
-                    self.update_progress("❌ Đã hủy")
-                    return
-
-                duration = end_time - start_time
-                segment_file = os.path.join(temp_dir, f"segment_{idx:03d}.mp4")
-                segment_files.append(segment_file)
-
-                self.update_progress(
-                    f"✂️  Đang cắt đoạn {idx}/{total_segments}: "
-                    f"{format_duration(start_time)} → {format_duration(end_time)}"
-                )
-
-                cmd = [
-                    'ffmpeg',
-                    '-ss', str(start_time),
-                    '-i', input_path,
-                    '-t', str(duration),
-                    '-c:v', 'libx264',
-                    '-c:a', 'aac',
-                    '-strict', 'experimental',
-                    '-y',
-                    segment_file
-                ]
-
-                result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-                if result.returncode != 0:
-                    raise RuntimeError(f"Lỗi khi cắt đoạn {idx}")
-
-            # Concatenate
-            self.update_progress("🔗 Đang ghép các đoạn lại với nhau...")
-
-            concat_file = os.path.join(temp_dir, "concat_list.txt")
-            with open(concat_file, 'w') as f:
-                for segment_file in segment_files:
-                    abs_path = os.path.abspath(segment_file)
-                    f.write(f"file '{abs_path}'\n")
-
-            concat_cmd = [
-                'ffmpeg',
-                '-f', 'concat',
-                '-safe', '0',
-                '-i', concat_file,
-                '-c', 'copy',
-                '-y',
-                output_path
-            ]
-
-            result = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-            if result.returncode != 0:
-                raise RuntimeError("Lỗi khi ghép video")
-
-            # Cleanup
-            import shutil
-            if os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
+            # Sử dụng hàm cut_video_segments đã được tối ưu
+            cut_video_segments(
+                input_video=input_path,
+                segments=segments,
+                output_video=output_path,
+                temp_dir="temp_segments_gui",
+                mode=mode,
+                max_workers=None,  # Auto-detect
+                progress_callback=progress_callback
+            )
 
             # Success
             self.root.after(0, lambda: self.processing_complete(output_path))

@@ -8,8 +8,10 @@ import os
 import sys
 import subprocess
 import argparse
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 
 def parse_time_to_seconds(time_str: str) -> float:
@@ -94,17 +96,82 @@ def check_ffmpeg():
         return False
 
 
-def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
-                       output_video: str, temp_dir: str = "temp_segments"):
+def cut_single_segment(input_video: str, start_time: float, end_time: float,
+                      output_file: str, mode: str = "accurate") -> bool:
     """
-    Cắt và ghép các đoạn video
+    Cắt một đoạn video đơn lẻ
+
+    Args:
+        input_video: Đường dẫn video đầu vào
+        start_time: Thời gian bắt đầu (giây)
+        end_time: Thời gian kết thúc (giây)
+        output_file: File đầu ra
+        mode: Chế độ cắt ('fast', 'balanced', 'accurate')
+
+    Returns:
+        True nếu thành công, False nếu thất bại
+    """
+    duration = end_time - start_time
+
+    # Xây dựng lệnh ffmpeg dựa trên mode
+    if mode == "fast":
+        # Fast mode: Copy codec (nhanh nhất, có thể không chính xác 1-2 giây)
+        cmd = [
+            'ffmpeg',
+            '-ss', str(start_time),
+            '-i', input_video,
+            '-t', str(duration),
+            '-c', 'copy',  # Copy codec - rất nhanh
+            '-avoid_negative_ts', '1',  # Tránh timestamp âm
+            '-y',
+            output_file
+        ]
+    else:
+        # Accurate/Balanced mode: Re-encode (chính xác tuyệt đối)
+        cmd = [
+            'ffmpeg',
+            '-ss', str(start_time),
+            '-i', input_video,
+            '-t', str(duration),
+            '-c:v', 'libx264',
+            '-preset', 'medium',  # Cân bằng giữa tốc độ và chất lượng
+            '-crf', '23',  # Constant Rate Factor (chất lượng tốt)
+            '-c:a', 'aac',
+            '-b:a', '128k',
+            '-strict', 'experimental',
+            '-y',
+            output_file
+        ]
+
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return result.returncode == 0
+
+
+def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
+                       output_video: str, temp_dir: str = "temp_segments",
+                       mode: str = "balanced", max_workers: Optional[int] = None,
+                       progress_callback=None):
+    """
+    Cắt và ghép các đoạn video với nhiều chế độ tốc độ
 
     Args:
         input_video: Đường dẫn video đầu vào
         segments: List các tuple (start_time, end_time)
         output_video: Đường dẫn video đầu ra
         temp_dir: Thư mục tạm để lưu các đoạn video
+        mode: Chế độ xử lý
+            - 'fast': Rất nhanh (copy codec) - có thể không chính xác 1-2 giây
+            - 'balanced': Cân bằng (song song + re-encode) - nhanh và chính xác
+            - 'accurate': Chính xác tuyệt đối (tuần tự + re-encode) - chậm nhất
+        max_workers: Số luồng xử lý song song (None = auto, chỉ dùng cho balanced mode)
+        progress_callback: Hàm callback để báo tiến trình (nhận message string)
     """
+    def log(message):
+        """Helper để in log hoặc gọi callback"""
+        print(message)
+        if progress_callback:
+            progress_callback(message)
+
     # Kiểm tra ffmpeg
     if not check_ffmpeg():
         raise RuntimeError("ffmpeg chưa được cài đặt. Vui lòng cài đặt ffmpeg trước.")
@@ -116,53 +183,82 @@ def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
     # Tạo thư mục tạm
     os.makedirs(temp_dir, exist_ok=True)
 
-    segment_files = []
-    total_duration = 0
+    # Thông tin mode
+    mode_info = {
+        'fast': '🚀 FAST MODE (Rất nhanh - có thể sai lệch 1-2s)',
+        'balanced': '⚡ BALANCED MODE (Nhanh + Chính xác)',
+        'accurate': '🎯 ACCURATE MODE (Chính xác tuyệt đối)'
+    }
 
-    print(f"\n🎬 Bắt đầu cắt video từ: {input_video}")
-    print(f"📊 Tổng số đoạn cần cắt: {len(segments)}\n")
+    log(f"\n🎬 Bắt đầu cắt video từ: {input_video}")
+    log(f"📊 Tổng số đoạn cần cắt: {len(segments)}")
+    log(f"⚙️  Chế độ: {mode_info.get(mode, mode)}\n")
+
+    segment_files = []
+    total_duration = sum(end - start for start, end in segments)
+    start_overall = time.time()
 
     try:
-        # Cắt từng đoạn
-        for idx, (start_time, end_time) in enumerate(segments, 1):
-            duration = end_time - start_time
-            total_duration += duration
+        if mode == "balanced":
+            # BALANCED MODE: Xử lý song song
+            if max_workers is None:
+                max_workers = min(4, len(segments))  # Tối đa 4 luồng song song
 
-            segment_file = os.path.join(temp_dir, f"segment_{idx:03d}.mp4")
-            segment_files.append(segment_file)
+            log(f"🔄 Đang cắt {len(segments)} đoạn song song với {max_workers} luồng...\n")
 
-            print(f"✂️  Đoạn {idx}/{len(segments)}: "
-                  f"{format_duration(start_time)} → {format_duration(end_time)} "
-                  f"(Độ dài: {format_duration(duration)})")
+            # Chuẩn bị danh sách tasks
+            tasks = []
+            for idx, (start_time, end_time) in enumerate(segments, 1):
+                segment_file = os.path.join(temp_dir, f"segment_{idx:03d}.mp4")
+                segment_files.append(segment_file)
+                tasks.append((idx, start_time, end_time, segment_file))
 
-            # Sử dụng ffmpeg để cắt đoạn video
-            # -ss: thời gian bắt đầu
-            # -t: độ dài đoạn cần cắt
-            # -c copy: copy codec (nhanh hơn nhưng có thể không chính xác)
-            # Hoặc dùng -c:v libx264 -c:a aac để encode lại (chậm hơn nhưng chính xác)
-            cmd = [
-                'ffmpeg',
-                '-ss', str(start_time),
-                '-i', input_video,
-                '-t', str(duration),
-                '-c:v', 'libx264',  # Encode lại để đảm bảo chính xác
-                '-c:a', 'aac',
-                '-strict', 'experimental',
-                '-y',  # Ghi đè file nếu tồn tại
-                segment_file
-            ]
+            # Xử lý song song
+            completed = 0
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_task = {
+                    executor.submit(cut_single_segment, input_video, start, end, out, mode): (idx, start, end)
+                    for idx, start, end, out in tasks
+                }
 
-            result = subprocess.run(cmd,
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
+                for future in as_completed(future_to_task):
+                    idx, start, end = future_to_task[future]
+                    completed += 1
+                    try:
+                        success = future.result()
+                        if success:
+                            duration = end - start
+                            log(f"✅ [{completed}/{len(segments)}] Đoạn {idx}: "
+                                f"{format_duration(start)} → {format_duration(end)} "
+                                f"(Độ dài: {format_duration(duration)})")
+                        else:
+                            raise RuntimeError(f"Lỗi khi cắt đoạn {idx}")
+                    except Exception as e:
+                        raise RuntimeError(f"Lỗi khi cắt đoạn {idx}: {str(e)}")
 
-            if result.returncode != 0:
-                raise RuntimeError(f"Lỗi khi cắt đoạn {idx}: {result.stderr.decode()}")
+        else:
+            # FAST/ACCURATE MODE: Xử lý tuần tự
+            for idx, (start_time, end_time) in enumerate(segments, 1):
+                duration = end_time - start_time
+                segment_file = os.path.join(temp_dir, f"segment_{idx:03d}.mp4")
+                segment_files.append(segment_file)
 
-        print(f"\n✅ Đã cắt xong {len(segments)} đoạn")
-        print(f"⏱️  Tổng thời lượng video mới: {format_duration(total_duration)}\n")
+                log(f"✂️  Đoạn {idx}/{len(segments)}: "
+                    f"{format_duration(start_time)} → {format_duration(end_time)} "
+                    f"(Độ dài: {format_duration(duration)})")
+
+                success = cut_single_segment(input_video, start_time, end_time, segment_file, mode)
+
+                if not success:
+                    raise RuntimeError(f"Lỗi khi cắt đoạn {idx}")
+
+        cutting_time = time.time() - start_overall
+        log(f"\n✅ Đã cắt xong {len(segments)} đoạn")
+        log(f"⏱️  Tổng thời lượng video mới: {format_duration(total_duration)}")
+        log(f"⚡ Thời gian cắt: {cutting_time:.1f}s\n")
 
         # Tạo file danh sách các đoạn để concatenate
+        log("🔗 Đang ghép các đoạn lại với nhau...")
         concat_file = os.path.join(temp_dir, "concat_list.txt")
         with open(concat_file, 'w') as f:
             for segment_file in segment_files:
@@ -170,9 +266,8 @@ def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
                 abs_path = os.path.abspath(segment_file)
                 f.write(f"file '{abs_path}'\n")
 
-        print("🔗 Đang ghép các đoạn lại với nhau...")
-
         # Ghép các đoạn lại
+        concat_start = time.time()
         concat_cmd = [
             'ffmpeg',
             '-f', 'concat',
@@ -190,7 +285,15 @@ def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
         if result.returncode != 0:
             raise RuntimeError(f"Lỗi khi ghép video: {result.stderr.decode()}")
 
-        print(f"✨ Hoàn thành! Video đã được lưu tại: {output_video}\n")
+        concat_time = time.time() - concat_start
+        total_time = time.time() - start_overall
+
+        log(f"✨ Hoàn thành! Video đã được lưu tại: {output_video}")
+        log(f"📊 Thống kê:")
+        log(f"   - Thời gian cắt: {cutting_time:.1f}s")
+        log(f"   - Thời gian ghép: {concat_time:.1f}s")
+        log(f"   - Tổng thời gian: {total_time:.1f}s")
+        log(f"   - Tốc độ xử lý: {total_duration/total_time:.1f}x realtime\n")
 
     finally:
         # Dọn dẹp các file tạm (tùy chọn)
@@ -210,7 +313,8 @@ def main():
         epilog="""
 Ví dụ sử dụng:
   %(prog)s -i video.mp4 -s "03:05-03:10|40:05-40:10|1:03:05-1:04:05" -o output.mp4
-  %(prog)s -i long_video.mp4 -s "00:30-01:00|05:00-05:30" -o highlights.mp4
+  %(prog)s -i video.mp4 -s "segments" -o output.mp4 --mode fast
+  %(prog)s -i video.mp4 -s "segments" -o output.mp4 --mode balanced --workers 4
 
 Định dạng thời gian:
   MM:SS       - Ví dụ: 03:05 (3 phút 5 giây)
@@ -219,6 +323,11 @@ Ví dụ sử dụng:
 Định dạng đoạn cắt:
   start1-end1|start2-end2|start3-end3
   Ví dụ: 03:05-03:10|40:05-40:10|1:03:05-1:04:05
+
+Chế độ xử lý (--mode):
+  fast      - 🚀 Rất nhanh (copy codec) - có thể sai lệch 1-2 giây
+  balanced  - ⚡ Cân bằng (song song + re-encode) - nhanh và chính xác (MẶC ĐỊNH)
+  accurate  - 🎯 Chính xác tuyệt đối (tuần tự + re-encode) - chậm nhất
         """
     )
 
@@ -230,6 +339,11 @@ Ví dụ sử dụng:
                        help='Đường dẫn video đầu ra')
     parser.add_argument('-t', '--temp-dir', default='temp_segments',
                        help='Thư mục tạm (mặc định: temp_segments)')
+    parser.add_argument('-m', '--mode', default='balanced',
+                       choices=['fast', 'balanced', 'accurate'],
+                       help='Chế độ xử lý (mặc định: balanced)')
+    parser.add_argument('-w', '--workers', type=int, default=None,
+                       help='Số luồng song song cho balanced mode (mặc định: auto)')
 
     args = parser.parse_args()
 
@@ -242,7 +356,14 @@ Ví dụ sử dụng:
             sys.exit(1)
 
         # Thực hiện cắt video
-        cut_video_segments(args.input, segments, args.output, args.temp_dir)
+        cut_video_segments(
+            args.input,
+            segments,
+            args.output,
+            temp_dir=args.temp_dir,
+            mode=args.mode,
+            max_workers=args.workers
+        )
 
     except Exception as e:
         print(f"\n❌ Lỗi: {e}")
