@@ -14,6 +14,8 @@ Công cụ Python đơn giản giúp bạn cắt nhiều đoạn từ video dài
 - 📊 **Hiển thị tiến trình** rõ ràng
 - 🪟 **Giao diện đồ họa** cho Windows (và các hệ điều hành khác)
 - 🎯 **Dễ sử dụng** với cả GUI và command-line
+- 🔊 **Tùy chọn âm thanh**: Bật/tắt audio theo ý muốn
+- ⚡ **3 chế độ tốc độ**: Fast (10-20x), Balanced (3-4x), Accurate
 
 ## 📋 Yêu cầu
 
@@ -56,7 +58,9 @@ python video_cutter_gui.py
    - Ví dụ: `03:05-03:10|40:05-40:10|1:03:05-1:04:05`
 3. **✓ Kiểm tra**: Nhấn "Kiểm tra định dạng" để xem trước kết quả
 4. **💾 Chọn nơi lưu**: Nhấn "Chọn nơi lưu" để chọn vị trí và tên file đầu ra
-5. **🚀 Bắt đầu**: Nhấn "BẮT ĐẦU CẮT VIDEO" và chờ hoàn thành!
+5. **⚙️ Chọn chế độ**: Chọn Fast/Balanced/Accurate (mặc định: Balanced)
+6. **🔊 Tùy chọn âm thanh**: Tích vào "🔇 Tắt âm thanh" nếu muốn video không có tiếng
+7. **🚀 Bắt đầu**: Nhấn "BẮT ĐẦU CẮT VIDEO" và chờ hoàn thành!
 
 #### Screenshots:
 
@@ -144,6 +148,27 @@ python video_cutter.py -i input.mp4 -s "segments" -o output.mp4
 # Accurate mode - Chính xác nhất
 python video_cutter.py -i input.mp4 -s "segments" -o output.mp4 --mode accurate
 ```
+
+### 🔊 Tùy chọn âm thanh
+
+Bật hoặc tắt âm thanh cho video đầu ra:
+
+```bash
+# Video không có âm thanh (silent)
+python video_cutter.py -i input.mp4 -s "segments" -o output.mp4 --no-audio
+
+# Video giữ nguyên âm thanh (mặc định)
+python video_cutter.py -i input.mp4 -s "segments" -o output.mp4
+
+# Kết hợp: Fast mode + No audio
+python video_cutter.py -i input.mp4 -s "segments" -o output.mp4 --mode fast --no-audio
+```
+
+**Khi nào dùng `--no-audio`:**
+- Tạo video để thêm nhạc nền sau
+- Video GIF-style không cần âm thanh
+- Giảm kích thước file
+- Tạo video highlight im lặng
 
 📖 **Chi tiết về hiệu suất**: Xem [PERFORMANCE.md](PERFORMANCE.md)
 

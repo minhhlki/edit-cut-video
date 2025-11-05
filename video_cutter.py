@@ -97,7 +97,8 @@ def check_ffmpeg():
 
 
 def cut_single_segment(input_video: str, start_time: float, end_time: float,
-                      output_file: str, mode: str = "accurate") -> bool:
+                      output_file: str, mode: str = "accurate",
+                      remove_audio: bool = False) -> bool:
     """
     Cắt một đoạn video đơn lẻ
 
@@ -107,6 +108,7 @@ def cut_single_segment(input_video: str, start_time: float, end_time: float,
         end_time: Thời gian kết thúc (giây)
         output_file: File đầu ra
         mode: Chế độ cắt ('fast', 'balanced', 'accurate')
+        remove_audio: True để loại bỏ âm thanh, False để giữ âm thanh
 
     Returns:
         True nếu thành công, False nếu thất bại
@@ -123,9 +125,10 @@ def cut_single_segment(input_video: str, start_time: float, end_time: float,
             '-t', str(duration),
             '-c', 'copy',  # Copy codec - rất nhanh
             '-avoid_negative_ts', '1',  # Tránh timestamp âm
-            '-y',
-            output_file
         ]
+        if remove_audio:
+            cmd.extend(['-an'])  # Remove audio
+        cmd.extend(['-y', output_file])
     else:
         # Accurate/Balanced mode: Re-encode (chính xác tuyệt đối)
         cmd = [
@@ -136,12 +139,12 @@ def cut_single_segment(input_video: str, start_time: float, end_time: float,
             '-c:v', 'libx264',
             '-preset', 'medium',  # Cân bằng giữa tốc độ và chất lượng
             '-crf', '23',  # Constant Rate Factor (chất lượng tốt)
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            '-strict', 'experimental',
-            '-y',
-            output_file
         ]
+        if remove_audio:
+            cmd.extend(['-an'])  # Remove audio
+        else:
+            cmd.extend(['-c:a', 'aac', '-b:a', '128k'])
+        cmd.extend(['-strict', 'experimental', '-y', output_file])
 
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return result.returncode == 0
@@ -150,7 +153,7 @@ def cut_single_segment(input_video: str, start_time: float, end_time: float,
 def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
                        output_video: str, temp_dir: str = "temp_segments",
                        mode: str = "balanced", max_workers: Optional[int] = None,
-                       progress_callback=None):
+                       remove_audio: bool = False, progress_callback=None):
     """
     Cắt và ghép các đoạn video với nhiều chế độ tốc độ
 
@@ -164,6 +167,7 @@ def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
             - 'balanced': Cân bằng (song song + re-encode) - nhanh và chính xác
             - 'accurate': Chính xác tuyệt đối (tuần tự + re-encode) - chậm nhất
         max_workers: Số luồng xử lý song song (None = auto, chỉ dùng cho balanced mode)
+        remove_audio: True để loại bỏ âm thanh, False để giữ âm thanh
         progress_callback: Hàm callback để báo tiến trình (nhận message string)
     """
     def log(message):
@@ -192,7 +196,8 @@ def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
 
     log(f"\n🎬 Bắt đầu cắt video từ: {input_video}")
     log(f"📊 Tổng số đoạn cần cắt: {len(segments)}")
-    log(f"⚙️  Chế độ: {mode_info.get(mode, mode)}\n")
+    log(f"⚙️  Chế độ: {mode_info.get(mode, mode)}")
+    log(f"🔊 Âm thanh: {'Tắt (Silent)' if remove_audio else 'Bật (Giữ nguyên)'}\n")
 
     segment_files = []
     total_duration = sum(end - start for start, end in segments)
@@ -217,7 +222,7 @@ def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
             completed = 0
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_task = {
-                    executor.submit(cut_single_segment, input_video, start, end, out, mode): (idx, start, end)
+                    executor.submit(cut_single_segment, input_video, start, end, out, mode, remove_audio): (idx, start, end)
                     for idx, start, end, out in tasks
                 }
 
@@ -247,7 +252,7 @@ def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
                     f"{format_duration(start_time)} → {format_duration(end_time)} "
                     f"(Độ dài: {format_duration(duration)})")
 
-                success = cut_single_segment(input_video, start_time, end_time, segment_file, mode)
+                success = cut_single_segment(input_video, start_time, end_time, segment_file, mode, remove_audio)
 
                 if not success:
                     raise RuntimeError(f"Lỗi khi cắt đoạn {idx}")
@@ -344,6 +349,8 @@ Chế độ xử lý (--mode):
                        help='Chế độ xử lý (mặc định: balanced)')
     parser.add_argument('-w', '--workers', type=int, default=None,
                        help='Số luồng song song cho balanced mode (mặc định: auto)')
+    parser.add_argument('--no-audio', action='store_true',
+                       help='Loại bỏ âm thanh khỏi video (tạo video silent)')
 
     args = parser.parse_args()
 
@@ -362,7 +369,8 @@ Chế độ xử lý (--mode):
             args.output,
             temp_dir=args.temp_dir,
             mode=args.mode,
-            max_workers=args.workers
+            max_workers=args.workers,
+            remove_audio=args.no_audio
         )
 
     except Exception as e:
