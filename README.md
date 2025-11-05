@@ -2,13 +2,18 @@
 
 Công cụ Python đơn giản giúp bạn cắt nhiều đoạn từ video dài và tự động ghép chúng lại với nhau.
 
+**🎨 Có 2 cách sử dụng:**
+- **GUI (Giao diện đồ họa)** - Dễ dùng, thân thiện cho người mới
+- **CLI (Command Line)** - Linh hoạt, mạnh mẽ cho người có kinh nghiệm
+
 ## ✨ Tính năng
 
 - ✂️ **Cắt nhiều đoạn** từ một video dài
 - 🔗 **Tự động ghép** các đoạn lại với nhau
 - ⏱️ **Định dạng thời gian linh hoạt**: hỗ trợ MM:SS và HH:MM:SS
 - 📊 **Hiển thị tiến trình** rõ ràng
-- 🎯 **Dễ sử dụng** với giao diện command-line đơn giản
+- 🪟 **Giao diện đồ họa** cho Windows (và các hệ điều hành khác)
+- 🎯 **Dễ sử dụng** với cả GUI và command-line
 
 ## 📋 Yêu cầu
 
@@ -34,6 +39,70 @@ brew install ffmpeg
 
 ## 🚀 Cách sử dụng
 
+### 🪟 Phương pháp 1: Giao diện đồ họa (GUI) - KHUYẾN NGHỊ
+
+**Cách đơn giản nhất! Dành cho mọi người.**
+
+#### Chạy ứng dụng GUI:
+
+```bash
+python video_cutter_gui.py
+```
+
+#### Các bước sử dụng:
+
+1. **📹 Chọn video đầu vào**: Nhấn nút "Chọn Video" để chọn file video dài của bạn
+2. **✂️ Nhập đoạn cắt**: Gõ các đoạn cần cắt theo định dạng, hoặc nhấn "Dán ví dụ mẫu"
+   - Ví dụ: `03:05-03:10|40:05-40:10|1:03:05-1:04:05`
+3. **✓ Kiểm tra**: Nhấn "Kiểm tra định dạng" để xem trước kết quả
+4. **💾 Chọn nơi lưu**: Nhấn "Chọn nơi lưu" để chọn vị trí và tên file đầu ra
+5. **🚀 Bắt đầu**: Nhấn "BẮT ĐẦU CẮT VIDEO" và chờ hoàn thành!
+
+#### Screenshots:
+
+```
+┌─────────────────────────────────────────────────┐
+│  🎬 VIDEO CUTTER TOOL                           │
+│  Công cụ cắt và ghép video                      │
+├─────────────────────────────────────────────────┤
+│  📹 Video đầu vào:                              │
+│  [C:\Videos\video.mp4        ] [Chọn Video]    │
+│                                                  │
+│  ✂️ Đoạn cần cắt:                               │
+│  ┌────────────────────────────────────────────┐ │
+│  │ 03:05-03:10|40:05-40:10|1:03:05-1:04:05   │ │
+│  └────────────────────────────────────────────┘ │
+│  [📝 Dán ví dụ mẫu] [✓ Kiểm tra định dạng]     │
+│                                                  │
+│  💾 Video đầu ra:                               │
+│  [C:\Videos\output.mp4       ] [Chọn nơi lưu]  │
+│                                                  │
+│  📊 Thông tin:                                  │
+│  ┌────────────────────────────────────────────┐ │
+│  │ ✅ Định dạng hợp lệ!                       │ │
+│  │ Tổng số đoạn: 3                            │ │
+│  │ Tổng thời lượng: 1 phút 10 giây           │ │
+│  └────────────────────────────────────────────┘ │
+│                                                  │
+│  [🚀 BẮT ĐẦU CẮT VIDEO] [❌ Hủy] [🗑️ Xóa tất cả] │
+└─────────────────────────────────────────────────┘
+```
+
+#### Tạo file .exe cho Windows:
+
+Xem hướng dẫn chi tiết trong [BUILD_WINDOWS.md](BUILD_WINDOWS.md)
+
+```bash
+pip install pyinstaller
+pyinstaller --onefile --windowed --name="VideoCutter" video_cutter_gui.py
+```
+
+File EXE sẽ nằm trong thư mục `dist/VideoCutter.exe`
+
+---
+
+### ⌨️ Phương pháp 2: Command Line (CLI)
+
 ### Cú pháp cơ bản
 
 ```bash
@@ -52,6 +121,31 @@ Các đoạn được phân cách bằng dấu `|`:
 ```
 start1-end1|start2-end2|start3-end3
 ```
+
+### ⚡ Chế độ xử lý (Performance Modes)
+
+Tool hỗ trợ 3 chế độ tốc độ khác nhau:
+
+| Chế độ | Tốc độ | Chính xác | Khi nào dùng |
+|--------|--------|-----------|--------------|
+| 🚀 **Fast** | Rất nhanh (10-20x) | ⚠️ ±1-2s | Test nhanh, video không quan trọng |
+| ⚡ **Balanced** | Nhanh (3-4x) | ✅ 100% | **KHUYẾN NGHỊ** - Dùng cho hầu hết trường hợp |
+| 🎯 **Accurate** | Chậm nhất | ✅ 100% | Video CỰC quan trọng |
+
+**Ví dụ sử dụng với mode:**
+
+```bash
+# Fast mode - Nhanh nhất
+python video_cutter.py -i input.mp4 -s "segments" -o output.mp4 --mode fast
+
+# Balanced mode - Mặc định (khuyến nghị)
+python video_cutter.py -i input.mp4 -s "segments" -o output.mp4
+
+# Accurate mode - Chính xác nhất
+python video_cutter.py -i input.mp4 -s "segments" -o output.mp4 --mode accurate
+```
+
+📖 **Chi tiết về hiệu suất**: Xem [PERFORMANCE.md](PERFORMANCE.md)
 
 ## 📝 Ví dụ
 

@@ -1,9 +1,18 @@
 # Video Cutter Tool - Dependencies
 
-# Không cần thư viện Python bổ sung (chỉ dùng standard library)
-# Tuy nhiên, bạn cần cài đặt ffmpeg trên hệ thống
+# === Python Dependencies ===
+# Không cần thư viện Python bổ sung cho chức năng cơ bản (chỉ dùng standard library)
+# - tkinter: Có sẵn trong Python (cho GUI)
+# - subprocess, os, sys, threading: Standard library
+
+# === Optional: Build Windows Executable ===
+# Chỉ cần nếu muốn tạo file .exe cho Windows
+pyinstaller>=5.0
+
+# === System Dependencies ===
+# Bạn cần cài đặt ffmpeg trên hệ thống
 
 # Cài đặt ffmpeg:
 # - Ubuntu/Debian: sudo apt-get install ffmpeg
 # - macOS: brew install ffmpeg
-# - Windows: Tải từ https://ffmpeg.org/download.html
+# - Windows: Tải từ https://ffmpeg.org/download.html hoặc https://www.gyan.dev/ffmpeg/builds/
