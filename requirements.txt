@@ -1,0 +1,9 @@
+# Video Cutter Tool - Dependencies
+
+# Không cần thư viện Python bổ sung (chỉ dùng standard library)
+# Tuy nhiên, bạn cần cài đặt ffmpeg trên hệ thống
+
+# Cài đặt ffmpeg:
+# - Ubuntu/Debian: sudo apt-get install ffmpeg
+# - macOS: brew install ffmpeg
+# - Windows: Tải từ https://ffmpeg.org/download.html
