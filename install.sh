@@ -100,13 +100,13 @@ else
     print_green "yt-dlp already installed"
 fi
 
-# Install Google Drive API client (optional)
-if ! python3 -c "import googleapiclient" 2>/dev/null; then
-    echo "Installing Google Drive API client..."
-    pip3 install google-api-python-client google-auth-httplib2 google-auth-oauthlib --quiet
-    print_green "Google Drive API client installed"
+# Install rclone if not installed
+if ! command -v rclone &> /dev/null; then
+    echo "📦 Installing rclone..."
+    sudo apt-get install -y rclone
+    print_green "rclone installed"
 else
-    print_green "Google Drive API client already installed"
+    print_green "rclone already installed ($(rclone version | head -n1))"
 fi
 
 echo ""
@@ -128,7 +128,7 @@ echo "📥 Downloading tool files..."
 FILES=(
     "video_cutter.py"
     "youtube_downloader.py"
-    "google_drive_uploader.py"
+    "rclone_uploader.py"
     "video_cutter_interactive.py"
     "video_cutter_gui.py"
 )

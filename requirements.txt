@@ -13,16 +13,16 @@ pyinstaller>=5.0
 # Cần nếu muốn tải video từ YouTube
 yt-dlp>=2023.12.30
 
-# === Optional: Google Drive Upload ===
-# Cần nếu muốn tự động upload lên Google Drive
-google-api-python-client>=2.0.0
-google-auth-httplib2>=0.1.0
-google-auth-oauthlib>=0.5.0
-
 # === System Dependencies ===
-# Bạn cần cài đặt ffmpeg trên hệ thống
+# Bạn cần cài đặt ffmpeg và rclone trên hệ thống
 
 # Cài đặt ffmpeg:
 # - Ubuntu/Debian: sudo apt-get install ffmpeg
 # - macOS: brew install ffmpeg
 # - Windows: Tải từ https://ffmpeg.org/download.html hoặc https://www.gyan.dev/ffmpeg/builds/
+
+# Cài đặt rclone (cho upload lên cloud storage):
+# - Ubuntu/Debian: sudo apt-get install rclone
+# - macOS: brew install rclone
+# - Windows: Tải từ https://rclone.org/downloads/
+# - Cấu hình: rclone config
