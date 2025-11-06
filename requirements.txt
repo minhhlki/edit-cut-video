@@ -9,6 +9,10 @@
 # Chỉ cần nếu muốn tạo file .exe cho Windows
 pyinstaller>=5.0
 
+# === Optional: YouTube Download Feature ===
+# Cần nếu muốn tải video từ YouTube
+yt-dlp>=2023.12.30
+
 # === System Dependencies ===
 # Bạn cần cài đặt ffmpeg trên hệ thống
 

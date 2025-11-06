@@ -16,11 +16,13 @@ Công cụ Python đơn giản giúp bạn cắt nhiều đoạn từ video dài
 - 🎯 **Dễ sử dụng** với cả GUI và command-line
 - 🔊 **Tùy chọn âm thanh**: Bật/tắt audio theo ý muốn
 - ⚡ **3 chế độ tốc độ**: Fast (10-20x), Balanced (3-4x), Accurate
+- 📥 **Tải video từ YouTube**: Tích hợp sẵn YouTube downloader
 
 ## 📋 Yêu cầu
 
 - Python 3.6+
 - ffmpeg
+- yt-dlp (tùy chọn - chỉ cần nếu muốn tải video từ YouTube)
 
 ### Cài đặt ffmpeg
 
@@ -39,6 +41,12 @@ brew install ffmpeg
 - Tải từ [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
 - Giải nén và thêm vào PATH
 
+### Cài đặt yt-dlp (Tùy chọn - cho tính năng YouTube)
+
+```bash
+pip install yt-dlp
+```
+
 ## 🚀 Cách sử dụng
 
 ### 🪟 Phương pháp 1: Giao diện đồ họa (GUI) - KHUYẾN NGHỊ
@@ -53,7 +61,19 @@ python video_cutter_gui.py
 
 #### Các bước sử dụng:
 
+**Tùy chọn A: Tải video từ YouTube (nếu cần)**
+
+0. **📥 Tải từ YouTube** (Tùy chọn):
+   - Nhập URL YouTube vào ô "YouTube URL"
+   - Nhấn "⬇️ Tải xuống"
+   - Video sẽ tự động điền vào mục "Video đầu vào" sau khi tải xong
+
+**Hoặc Tùy chọn B: Chọn video có sẵn**
+
 1. **📹 Chọn video đầu vào**: Nhấn nút "Chọn Video" để chọn file video dài của bạn
+
+**Sau đó, tiếp tục với các bước sau:**
+
 2. **✂️ Nhập đoạn cắt**: Gõ các đoạn cần cắt theo định dạng, hoặc nhấn "Dán ví dụ mẫu"
    - Ví dụ: `03:05-03:10|40:05-40:10|1:03:05-1:04:05`
 3. **✓ Kiểm tra**: Nhấn "Kiểm tra định dạng" để xem trước kết quả
@@ -207,6 +227,39 @@ python video_cutter.py \
   -o output.mp4 \
   -t my_temp_folder
 ```
+
+### Ví dụ 4: Tải video từ YouTube (CLI)
+
+```bash
+# Tải video từ YouTube
+python youtube_downloader.py https://www.youtube.com/watch?v=VIDEO_ID
+
+# Tải và chỉ định tên file
+python youtube_downloader.py https://www.youtube.com/watch?v=VIDEO_ID -o my_video.mp4
+
+# Tải vào thư mục cụ thể
+python youtube_downloader.py https://www.youtube.com/watch?v=VIDEO_ID -d ./my_videos
+
+# Chỉ xem thông tin video (không tải)
+python youtube_downloader.py https://www.youtube.com/watch?v=VIDEO_ID --info
+```
+
+### Ví dụ 5: Workflow hoàn chỉnh (YouTube → Cắt)
+
+```bash
+# Bước 1: Tải video từ YouTube
+python youtube_downloader.py https://www.youtube.com/watch?v=VIDEO_ID -o youtube_video.mp4
+
+# Bước 2: Cắt video vừa tải
+python video_cutter.py \
+  -i downloads/youtube_video.mp4 \
+  -s "00:30-01:00|05:00-05:30|10:00-11:00" \
+  -o highlights.mp4 \
+  --mode fast \
+  --no-audio
+```
+
+**💡 Mẹo**: Dùng GUI để làm tất cả trong một bước - không cần chạy nhiều lệnh!
 
 ## 🎯 Các tham số
 
