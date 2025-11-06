@@ -134,7 +134,7 @@ FILES=(
 )
 
 # GitHub raw URL base (UPDATE THIS WITH YOUR REPO)
-REPO_BASE="https://raw.githubusercontent.com/YOUR_USERNAME/edit-cut-video/main"
+REPO_BASE="https://raw.githubusercontent.com/minhhlki/edit-cut-video/main"
 
 for file in "${FILES[@]}"; do
     if [ -f "$file" ]; then
