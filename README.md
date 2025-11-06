@@ -2,9 +2,27 @@
 
 Công cụ Python đơn giản giúp bạn cắt nhiều đoạn từ video dài và tự động ghép chúng lại với nhau.
 
-**🎨 Có 2 cách sử dụng:**
-- **GUI (Giao diện đồ họa)** - Dễ dùng, thân thiện cho người mới
+**🎨 Có 3 cách sử dụng:**
+- **Interactive CLI** - Hỏi từng bước, dễ nhất cho người mới (KHUYẾN NGHỊ)
+- **GUI (Giao diện đồ họa)** - Dễ dùng, thân thiện
 - **CLI (Command Line)** - Linh hoạt, mạnh mẽ cho người có kinh nghiệm
+
+## 🚀 Cài đặt nhanh (Ubuntu/Debian)
+
+**Chỉ cần 1 dòng lệnh:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/edit-cut-video/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
+```
+
+Script sẽ tự động:
+- ✅ Cài ffmpeg, Python, pip
+- ✅ Cài yt-dlp (YouTube downloader)
+- ✅ Cài Google Drive API
+- ✅ Tải xuống tất cả files
+- ✅ Mở interactive mode ngay sau khi cài xong
+
+📖 **Chi tiết**: Xem [QUICKSTART.md](QUICKSTART.md)
 
 ## ✨ Tính năng
 
@@ -17,6 +35,7 @@ Công cụ Python đơn giản giúp bạn cắt nhiều đoạn từ video dài
 - 🔊 **Tùy chọn âm thanh**: Bật/tắt audio theo ý muốn
 - ⚡ **3 chế độ tốc độ**: Fast (10-20x), Balanced (3-4x), Accurate
 - 📥 **Tải video từ YouTube**: Tích hợp sẵn YouTube downloader
+- ☁️ **Auto-upload Google Drive**: Tự động upload video sau khi render xong
 
 ## 📋 Yêu cầu
 
