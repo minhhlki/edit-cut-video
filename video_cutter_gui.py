@@ -18,6 +18,13 @@ from video_cutter import (
 )
 import subprocess
 
+# Import YouTube downloader (optional)
+try:
+    from youtube_downloader import YouTubeDownloader
+    YOUTUBE_AVAILABLE = True
+except ImportError:
+    YOUTUBE_AVAILABLE = False
+
 
 class VideoCutterGUI:
     def __init__(self, root):
@@ -33,6 +40,11 @@ class VideoCutterGUI:
         self.processing_mode = tk.StringVar(value="balanced")  # Default: balanced
         self.remove_audio = tk.BooleanVar(value=False)  # Default: keep audio
         self.is_processing = False
+
+        # YouTube downloader variables
+        self.youtube_url = tk.StringVar()
+        self.is_downloading = False
+        self.youtube_downloader = YouTubeDownloader(output_path="downloads") if YOUTUBE_AVAILABLE else None
 
         # Setup UI
         self.setup_ui()
@@ -70,8 +82,39 @@ class VideoCutterGUI:
         )
         subtitle_label.pack()
 
-        # ===== INPUT VIDEO =====
         row = 1
+
+        # ===== YOUTUBE DOWNLOAD =====
+        if YOUTUBE_AVAILABLE:
+            youtube_frame = ttk.LabelFrame(main_frame, text="📥 Tải video từ YouTube (Tùy chọn)", padding="10")
+            youtube_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 15))
+            youtube_frame.columnconfigure(0, weight=1)
+
+            # YouTube URL input
+            url_frame = ttk.Frame(youtube_frame)
+            url_frame.pack(fill=tk.X, pady=(0, 5))
+            url_frame.columnconfigure(0, weight=1)
+
+            ttk.Label(url_frame, text="🔗 YouTube URL:").grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+
+            url_entry_frame = ttk.Frame(url_frame)
+            url_entry_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
+            url_entry_frame.columnconfigure(0, weight=1)
+
+            self.youtube_url_entry = ttk.Entry(url_entry_frame, textvariable=self.youtube_url)
+            self.youtube_url_entry.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10))
+
+            self.download_btn = ttk.Button(url_entry_frame, text="⬇️ Tải xuống", command=self.start_youtube_download)
+            self.download_btn.grid(row=0, column=1)
+
+            # YouTube download status
+            self.youtube_status = tk.StringVar(value="Nhập URL YouTube và nhấn Tải xuống")
+            youtube_status_label = ttk.Label(youtube_frame, textvariable=self.youtube_status, font=("Arial", 8), foreground="gray")
+            youtube_status_label.pack(anchor=tk.W, pady=(5, 0))
+
+            row += 1
+
+        # ===== INPUT VIDEO =====
         ttk.Label(main_frame, text="📹 Video đầu vào:", font=("Arial", 10, "bold")).grid(
             row=row, column=0, sticky=tk.W, pady=(10, 5)
         )
@@ -495,6 +538,99 @@ class VideoCutterGUI:
             self.progress_label.config(text="❌ Đã hủy")
             self.process_btn.config(state="normal")
             self.cancel_btn.config(state="disabled")
+
+    # ===== YOUTUBE DOWNLOAD METHODS =====
+
+    def start_youtube_download(self):
+        """Bắt đầu tải video từ YouTube"""
+        if not YOUTUBE_AVAILABLE:
+            messagebox.showerror(
+                "Thiếu thư viện",
+                "yt-dlp chưa được cài đặt!\n\n"
+                "Vui lòng cài đặt: pip install yt-dlp"
+            )
+            return
+
+        url = self.youtube_url.get().strip()
+        if not url:
+            messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập URL YouTube!")
+            return
+
+        # Validate URL
+        if "youtube.com" not in url and "youtu.be" not in url:
+            messagebox.showwarning("URL không hợp lệ", "Vui lòng nhập URL YouTube hợp lệ!")
+            return
+
+        # Start download in background
+        self.is_downloading = True
+        self.download_btn.config(state="disabled")
+        self.youtube_status.set("⏳ Đang tải xuống...")
+
+        thread = threading.Thread(
+            target=self.download_youtube_video,
+            args=(url,),
+            daemon=True
+        )
+        thread.start()
+
+    def download_youtube_video(self, url):
+        """Tải video YouTube (chạy trong thread riêng)"""
+        try:
+            def progress_callback(message):
+                if self.is_downloading:
+                    self.root.after(0, lambda: self.youtube_status.set(message))
+
+            success, file_path = self.youtube_downloader.download_video(
+                url,
+                progress_callback=progress_callback
+            )
+
+            if success and file_path:
+                self.root.after(0, lambda: self.youtube_download_complete(file_path))
+            else:
+                self.root.after(0, lambda: self.youtube_download_error("Tải xuống thất bại"))
+
+        except Exception as e:
+            self.root.after(0, lambda: self.youtube_download_error(str(e)))
+
+    def youtube_download_complete(self, file_path):
+        """Xử lý khi tải YouTube hoàn thành"""
+        self.is_downloading = False
+        self.download_btn.config(state="normal")
+        self.youtube_status.set(f"✅ Đã tải xong: {Path(file_path).name}")
+
+        # Auto-fill input video path
+        self.input_video_path.set(file_path)
+
+        # Auto-suggest output filename
+        if not self.output_video_path.get():
+            input_path = Path(file_path)
+            output_name = input_path.stem + "_cut" + input_path.suffix
+            output_path = input_path.parent / output_name
+            self.output_video_path.set(str(output_path))
+
+        messagebox.showinfo(
+            "Thành công",
+            f"✅ Video đã được tải xuống!\n\n"
+            f"📁 Vị trí: {file_path}\n\n"
+            f"✂️ Video đã được tự động điền vào mục 'Video đầu vào'.\n"
+            f"Bạn có thể tiếp tục nhập đoạn cắt và xử lý video."
+        )
+
+    def youtube_download_error(self, error_message):
+        """Xử lý lỗi khi tải YouTube"""
+        self.is_downloading = False
+        self.download_btn.config(state="normal")
+        self.youtube_status.set(f"❌ Lỗi: {error_message}")
+
+        messagebox.showerror(
+            "Lỗi tải xuống",
+            f"❌ Không thể tải video:\n\n{error_message}\n\n"
+            f"Vui lòng kiểm tra:\n"
+            f"- URL có đúng không\n"
+            f"- Kết nối internet\n"
+            f"- ffmpeg đã được cài đặt"
+        )
 
 
 def main():
