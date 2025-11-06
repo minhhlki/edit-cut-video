@@ -12,7 +12,7 @@ Công cụ Python đơn giản giúp bạn cắt nhiều đoạn từ video dài
 **Chỉ cần 1 dòng lệnh:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/edit-cut-video/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
+curl -fsSL https://raw.githubusercontent.com/minhhlki/edit-cut-video/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
 ```
 
 Script sẽ tự động:
