@@ -84,7 +84,7 @@ class GoogleDriveUploader:
             print(f"❌ Error with folder: {e}")
             return None
 
-    def upload_file(self, file_path, file_name=None, folder_name=None, progress_callback=None):
+    def upload_file(self, file_path, file_name=None, folder_name=None, folder_id=None, progress_callback=None):
         """
         Upload a file to Google Drive
 
@@ -92,6 +92,7 @@ class GoogleDriveUploader:
             file_path: Path to the file to upload
             file_name: Name for the file on Drive (default: original filename)
             folder_name: Name of folder to upload to (optional)
+            folder_id: Direct folder ID to upload to (optional, takes priority over folder_name)
             progress_callback: Callback function for progress updates
 
         Returns:
@@ -108,7 +109,11 @@ class GoogleDriveUploader:
 
         # Get or create folder
         parent_id = None
-        if folder_name:
+        if folder_id:
+            # Use direct folder ID if provided
+            parent_id = folder_id
+            print(f"📁 Using folder ID: {folder_id}")
+        elif folder_name:
             parent_id = self.get_or_create_folder(folder_name)
 
         # File metadata

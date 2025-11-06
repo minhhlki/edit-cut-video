@@ -182,7 +182,7 @@ def get_gdrive_credentials():
         return None
 
 
-def upload_to_gdrive(file_path, credentials):
+def upload_to_gdrive(file_path, credentials, folder_id=None):
     """Upload file to Google Drive"""
     if not GDRIVE_AVAILABLE:
         print("❌ Google Drive API not available")
@@ -195,9 +195,8 @@ def upload_to_gdrive(file_path, credentials):
         uploader = GoogleDriveUploader(credentials)
 
         file_name = Path(file_path).name
-        folder_name = get_input("Google Drive folder name", default="Video Cutter Uploads", optional=True)
 
-        file_id = uploader.upload_file(file_path, file_name, folder_name)
+        file_id = uploader.upload_file(file_path, file_name, folder_id=folder_id)
 
         if file_id:
             print(f"\n✅ Uploaded successfully!")
@@ -299,6 +298,7 @@ def main():
     print_separator()
 
     gdrive_credentials = None
+    gdrive_folder_id = None
     upload_to_drive = get_yes_no("📤 Upload to Google Drive after processing?", default=False)
 
     if upload_to_drive:
@@ -306,6 +306,15 @@ def main():
         if not gdrive_credentials:
             print("⚠️  No valid credentials provided. Skipping Google Drive upload.")
             upload_to_drive = False
+        else:
+            # Ask for folder ID
+            print()
+            default_folder_id = "1tli-AJjBPTAl4BBaIcYth__DjHM6HyY2"
+            gdrive_folder_id = get_input(
+                "📁 Google Drive Folder ID",
+                default=default_folder_id,
+                optional=False
+            )
 
     # Summary
     print()
@@ -350,7 +359,7 @@ def main():
         # Upload to Google Drive if requested
         if upload_to_drive and gdrive_credentials:
             print()
-            if upload_to_gdrive(output_video, gdrive_credentials):
+            if upload_to_gdrive(output_video, gdrive_credentials, gdrive_folder_id):
                 print("\n✅ Upload to Google Drive complete!")
             else:
                 print("\n⚠️  Upload to Google Drive failed")
