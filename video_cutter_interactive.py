@@ -18,12 +18,12 @@ except ImportError as e:
     print(f"Warning: Some modules not available: {e}")
     YOUTUBE_AVAILABLE = False
 
-# Import Google Drive uploader
+# Import Rclone uploader
 try:
-    from google_drive_uploader import GoogleDriveUploader
-    GDRIVE_AVAILABLE = True
+    from rclone_uploader import RcloneUploader
+    RCLONE_AVAILABLE = True
 except ImportError:
-    GDRIVE_AVAILABLE = False
+    RCLONE_AVAILABLE = False
 
 
 def print_header():
@@ -135,21 +135,27 @@ def validate_segments(segments_str):
         return False
 
 
-def get_gdrive_credentials():
-    """Get Google Drive API credentials"""
-    if not GDRIVE_AVAILABLE:
-        print("⚠️  Google Drive API not available. Install with:")
-        print("   pip install google-api-python-client google-auth")
+def get_rclone_config():
+    """Get rclone config content"""
+    if not RCLONE_AVAILABLE:
+        print("⚠️  Rclone uploader not available.")
         return None
 
-    print("\n📤 Google Drive Upload Configuration")
+    print("\n📤 Rclone Configuration")
     print_separator()
-    print("Please paste your Google Drive service account JSON key.")
-    print("(Paste the entire JSON content, then press Enter twice)")
+    print("Please paste your rclone.conf content.")
+    print("Example format:")
+    print("  [gdrive]")
+    print("  type = drive")
+    print("  scope = drive")
+    print("  token = {...}")
+    print("  team_drive = ")
+    print()
+    print("(Paste the entire config, then press Enter twice)")
     print()
 
-    json_lines = []
-    print("Paste JSON (press Enter twice when done):")
+    config_lines = []
+    print("Paste rclone.conf (press Enter twice when done):")
 
     empty_count = 0
     while empty_count < 2:
@@ -158,52 +164,50 @@ def get_gdrive_credentials():
             empty_count += 1
         else:
             empty_count = 0
-            json_lines.append(line)
+            config_lines.append(line)
 
-    json_str = '\n'.join(json_lines)
+    config_str = '\n'.join(config_lines)
 
-    if not json_str.strip():
+    if not config_str.strip():
         return None
 
-    try:
-        credentials = json.loads(json_str)
-
-        # Validate required fields
-        required_fields = ['type', 'project_id', 'private_key', 'client_email']
-        for field in required_fields:
-            if field not in credentials:
-                print(f"❌ Missing required field: {field}")
-                return None
-
-        print("✅ Valid Google Drive credentials!")
-        return credentials
-    except json.JSONDecodeError as e:
-        print(f"❌ Invalid JSON format: {e}")
+    # Basic validation - check if it looks like rclone config
+    if '[' not in config_str or 'type' not in config_str:
+        print("⚠️  Config doesn't look like a valid rclone config")
+        print("Expected format with [remote_name] and type = ...")
         return None
 
+    print("✅ Valid rclone config!")
+    return config_str
 
-def upload_to_gdrive(file_path, credentials, folder_id=None):
-    """Upload file to Google Drive"""
-    if not GDRIVE_AVAILABLE:
-        print("❌ Google Drive API not available")
+
+def upload_with_rclone(file_path, rclone_config, remote_path=''):
+    """Upload file using rclone"""
+    if not RCLONE_AVAILABLE:
+        print("❌ Rclone uploader not available")
         return False
 
-    print("\n📤 Uploading to Google Drive...")
+    print("\n📤 Uploading with rclone...")
     print_separator()
 
     try:
-        uploader = GoogleDriveUploader(credentials)
+        uploader = RcloneUploader(rclone_config)
 
-        file_name = Path(file_path).name
+        # List available remotes
+        remotes = uploader.list_remotes()
+        if remotes:
+            print(f"📋 Available remotes: {', '.join(remotes)}")
+            remote_name = remotes[0]
+            print(f"🎯 Using remote: {remote_name}")
+        else:
+            print("⚠️  No remotes found in config")
+            return False
 
-        file_id = uploader.upload_file(file_path, file_name, folder_id=folder_id)
+        # Upload
+        success = uploader.upload_file(file_path, remote_name, remote_path)
 
-        if file_id:
+        if success:
             print(f"\n✅ Uploaded successfully!")
-            print(f"File ID: {file_id}")
-            link = uploader.get_file_link(file_id)
-            if link:
-                print(f"Link: {link}")
             return True
         else:
             print("\n❌ Upload failed")
@@ -291,30 +295,29 @@ def main():
     print()
     remove_audio = get_yes_no("🔊 Remove audio (create silent video)?", default=False)
 
-    # Step 7: Google Drive Upload (Optional)
+    # Step 7: Rclone Upload (Optional)
     print()
     print_separator()
-    print("STEP 4: Google Drive Upload (Optional)")
+    print("STEP 4: Rclone Upload (Optional)")
     print_separator()
 
-    gdrive_credentials = None
-    gdrive_folder_id = None
-    upload_to_drive = get_yes_no("📤 Upload to Google Drive after processing?", default=False)
+    rclone_config = None
+    remote_path = ''
+    upload_enabled = get_yes_no("📤 Upload with rclone after processing?", default=False)
 
-    if upload_to_drive:
-        gdrive_credentials = get_gdrive_credentials()
-        if not gdrive_credentials:
-            print("⚠️  No valid credentials provided. Skipping Google Drive upload.")
-            upload_to_drive = False
+    if upload_enabled:
+        rclone_config = get_rclone_config()
+        if not rclone_config:
+            print("⚠️  No valid rclone config provided. Skipping upload.")
+            upload_enabled = False
         else:
-            # Ask for folder ID
+            # Ask for remote path (optional)
             print()
-            default_folder_id = "1tli-AJjBPTAl4BBaIcYth__DjHM6HyY2"
-            gdrive_folder_id = get_input(
-                "📁 Google Drive Folder ID",
-                default=default_folder_id,
-                optional=False
-            )
+            remote_path = get_input(
+                "📁 Remote path (folder in Google Drive)",
+                default="",
+                optional=True
+            ) or ''
 
     # Summary
     print()
@@ -326,7 +329,9 @@ def main():
     print(f"Output: {output_video}")
     print(f"Mode: {mode.upper()}")
     print(f"Audio: {'OFF (Silent)' if remove_audio else 'ON'}")
-    print(f"Google Drive Upload: {'YES' if upload_to_drive else 'NO'}")
+    print(f"Rclone Upload: {'YES' if upload_enabled else 'NO'}")
+    if upload_enabled and remote_path:
+        print(f"Remote Path: {remote_path}")
     print_separator()
     print()
 
@@ -356,13 +361,13 @@ def main():
         print("=" * 60)
         print(f"\n📁 Output saved to: {output_video}")
 
-        # Upload to Google Drive if requested
-        if upload_to_drive and gdrive_credentials:
+        # Upload with rclone if requested
+        if upload_enabled and rclone_config:
             print()
-            if upload_to_gdrive(output_video, gdrive_credentials, gdrive_folder_id):
-                print("\n✅ Upload to Google Drive complete!")
+            if upload_with_rclone(output_video, rclone_config, remote_path):
+                print("\n✅ Upload complete!")
             else:
-                print("\n⚠️  Upload to Google Drive failed")
+                print("\n⚠️  Upload failed")
 
         print()
         print("🎉 All done! Thank you for using Video Cutter Tool!")
