@@ -90,7 +90,7 @@ def get_yes_no(prompt, default=False):
     return response in ['y', 'yes', '1', 'true']
 
 
-def download_youtube_video(url):
+def download_youtube_video(url, output_path="downloads"):
     """Download video from YouTube"""
     if not YOUTUBE_AVAILABLE:
         print("❌ YouTube downloader not available. Please check yt-dlp installation.")
@@ -98,8 +98,12 @@ def download_youtube_video(url):
 
     print("\n📥 Downloading video from YouTube...")
     print_separator()
+    print(f"📁 Save to: {output_path}")
 
-    downloader = YouTubeDownloader(output_path="downloads")
+    # Create output directory if it doesn't exist
+    Path(output_path).mkdir(parents=True, exist_ok=True)
+
+    downloader = YouTubeDownloader(output_path=output_path)
 
     def progress_callback(message):
         print(f"\r{message}", end='', flush=True)
@@ -237,10 +241,25 @@ def main():
 
     youtube_url = get_input("🔗 YouTube URL", optional=True)
     input_video = None
+    auto_fill = True  # Default to auto-fill
 
     if youtube_url:
-        input_video = download_youtube_video(youtube_url)
-        if not input_video:
+        # Ask for download folder
+        print()
+        download_folder = get_input("📁 Download folder", default="downloads", optional=False)
+
+        # Ask if auto-fill input video
+        print()
+        auto_fill = get_yes_no("✨ Auto-fill downloaded video as input?", default=True)
+
+        # Download
+        downloaded_file = download_youtube_video(youtube_url, download_folder)
+
+        if downloaded_file:
+            if auto_fill:
+                input_video = downloaded_file
+                print(f"✅ Auto-filled input video: {input_video}")
+        else:
             print("⚠️  Download failed. Please provide a local video file instead.")
 
     # Step 2: Input Video
@@ -291,9 +310,31 @@ def main():
     mode_choice = get_choice("⚙️  Processing mode", modes, default=2)
     mode = mode_map[mode_choice]
 
-    # Step 6: Audio Option
+    # Step 6: Volume Control
     print()
-    remove_audio = get_yes_no("🔊 Remove audio (create silent video)?", default=False)
+    print("🔊 Volume Control")
+    print("  0% = Mute (no audio)")
+    print("  100% = Original volume (default)")
+    print("  150% = 1.5x louder")
+    print("  200% = 2x louder")
+
+    while True:
+        volume_input = input("Volume (0-200%) [100]: ").strip()
+
+        if not volume_input:
+            volume = 100
+            break
+
+        try:
+            volume = int(volume_input)
+            if 0 <= volume <= 200:
+                break
+            else:
+                print("Please enter a number between 0 and 200")
+        except ValueError:
+            print("Please enter a valid number")
+
+    print(f"✅ Volume set to: {volume}%")
 
     # Step 7: Rclone Upload (Optional)
     print()
@@ -328,7 +369,7 @@ def main():
     print(f"Segments: {len(segments)} segments")
     print(f"Output: {output_video}")
     print(f"Mode: {mode.upper()}")
-    print(f"Audio: {'OFF (Silent)' if remove_audio else 'ON'}")
+    print(f"Volume: {volume}%")
     print(f"Rclone Upload: {'YES' if upload_enabled else 'NO'}")
     if upload_enabled and remote_path:
         print(f"Remote Path: {remote_path}")
@@ -352,7 +393,7 @@ def main():
             segments=segments,
             output_video=output_video,
             mode=mode,
-            remove_audio=remove_audio
+            volume=volume
         )
 
         print()
