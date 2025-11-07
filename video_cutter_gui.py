@@ -25,6 +25,13 @@ try:
 except ImportError:
     YOUTUBE_AVAILABLE = False
 
+# Import Rclone uploader (optional)
+try:
+    from rclone_uploader import RcloneUploader
+    RCLONE_AVAILABLE = True
+except ImportError:
+    RCLONE_AVAILABLE = False
+
 
 class VideoCutterGUI:
     def __init__(self, root):
@@ -38,13 +45,19 @@ class VideoCutterGUI:
         self.output_video_path = tk.StringVar()
         self.segments_text = tk.StringVar()
         self.processing_mode = tk.StringVar(value="balanced")  # Default: balanced
-        self.remove_audio = tk.BooleanVar(value=False)  # Default: keep audio
+        self.volume = tk.IntVar(value=100)  # Default: 100% (original volume)
         self.is_processing = False
 
         # YouTube downloader variables
         self.youtube_url = tk.StringVar()
         self.is_downloading = False
         self.youtube_downloader = YouTubeDownloader(output_path="downloads") if YOUTUBE_AVAILABLE else None
+
+        # Rclone variables
+        self.rclone_config_file = "rclone_config.conf"
+        self.rclone_config_content = None
+        self.remote_path = tk.StringVar(value="")  # Remote folder path
+        self.load_rclone_config()
 
         # Setup UI
         self.setup_ui()
@@ -227,19 +240,37 @@ class VideoCutterGUI:
         )
         mode_explain.pack(anchor=tk.W, pady=(5, 0))
 
-        # ===== AUDIO OPTIONS =====
+        # ===== VOLUME CONTROL =====
         row += 2
-        audio_frame = ttk.Frame(main_frame)
-        audio_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 10))
+        volume_frame = ttk.LabelFrame(main_frame, text="🔊 Điều chỉnh âm lượng", padding="10")
+        volume_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 10))
 
-        ttk.Label(audio_frame, text="🔊 Tùy chọn âm thanh:", font=("Arial", 10, "bold")).pack(anchor=tk.W)
+        volume_info_frame = ttk.Frame(volume_frame)
+        volume_info_frame.pack(fill=tk.X, pady=(0, 5))
 
-        audio_checkbox = ttk.Checkbutton(
-            audio_frame,
-            text="🔇 Tắt âm thanh (tạo video silent - không có tiếng)",
-            variable=self.remove_audio
+        ttk.Label(volume_info_frame, text="0% = Tắt | 100% = Giữ nguyên | 200% = Tăng 2x").pack(side=tk.LEFT)
+        self.volume_label = ttk.Label(volume_info_frame, text="100%", font=("Arial", 10, "bold"))
+        self.volume_label.pack(side=tk.RIGHT)
+
+        volume_slider = ttk.Scale(
+            volume_frame,
+            from_=0,
+            to=200,
+            orient=tk.HORIZONTAL,
+            variable=self.volume,
+            command=self.update_volume_label
         )
-        audio_checkbox.pack(anchor=tk.W, pady=(5, 0))
+        volume_slider.pack(fill=tk.X, pady=(0, 5))
+
+        # Preset buttons
+        preset_frame = ttk.Frame(volume_frame)
+        preset_frame.pack(fill=tk.X)
+
+        ttk.Button(preset_frame, text="Tắt (0%)", command=lambda: self.set_volume(0)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(preset_frame, text="50%", command=lambda: self.set_volume(50)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(preset_frame, text="100%", command=lambda: self.set_volume(100)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(preset_frame, text="150%", command=lambda: self.set_volume(150)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(preset_frame, text="200%", command=lambda: self.set_volume(200)).pack(side=tk.LEFT, padx=2)
 
         # ===== PREVIEW INFO =====
         row += 1
@@ -258,6 +289,41 @@ class VideoCutterGUI:
             state="disabled"
         )
         self.info_text.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+
+        # ===== RCLONE UPLOAD =====
+        row += 1
+        rclone_frame = ttk.LabelFrame(main_frame, text="📤 Upload lên Google Drive (Rclone)", padding="10")
+        rclone_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 10))
+        rclone_frame.columnconfigure(0, weight=1)
+
+        # Status label
+        self.rclone_status = tk.StringVar(value="⚠️ Chưa cấu hình rclone" if not self.rclone_config_content else "✅ Đã cấu hình rclone")
+        status_label = ttk.Label(rclone_frame, textvariable=self.rclone_status, font=("Arial", 9))
+        status_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+
+        # Config button
+        self.config_btn = ttk.Button(
+            rclone_frame,
+            text="⚙️ Cấu hình rclone" if not self.rclone_config_content else "✏️ Chỉnh sửa cấu hình",
+            command=self.show_rclone_config_dialog
+        )
+        self.config_btn.grid(row=0, column=1, sticky=tk.E, pady=(0, 5))
+
+        # Remote path
+        path_frame = ttk.Frame(rclone_frame)
+        path_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
+        path_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(path_frame, text="📁 Thư mục trên Drive:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        remote_entry = ttk.Entry(path_frame, textvariable=self.remote_path)
+        remote_entry.grid(row=0, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(
+            rclone_frame,
+            text="💡 Để trống = thư mục gốc",
+            font=("Arial", 8),
+            foreground="gray"
+        ).grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
 
         # ===== PROGRESS BAR =====
         row += 1
@@ -284,6 +350,14 @@ class VideoCutterGUI:
             style="Accent.TButton"
         )
         self.process_btn.pack(side=tk.LEFT, padx=5)
+
+        self.process_upload_btn = ttk.Button(
+            button_frame,
+            text="📤 CẮT VÀ UPLOAD LÊN DRIVE",
+            command=self.start_processing_with_upload,
+            style="Accent.TButton"
+        )
+        self.process_upload_btn.pack(side=tk.LEFT, padx=5)
 
         self.cancel_btn = ttk.Button(
             button_frame,
@@ -409,7 +483,149 @@ class VideoCutterGUI:
             self.segments_entry.delete("1.0", tk.END)
             self.update_info_text("Đã xóa tất cả. Sẵn sàng bắt đầu mới!")
 
-    def start_processing(self):
+    # ===== VOLUME CONTROL METHODS =====
+
+    def update_volume_label(self, value):
+        """Update volume label when slider changes"""
+        vol = int(float(value))
+        self.volume_label.config(text=f"{vol}%")
+
+    def set_volume(self, value):
+        """Set volume to specific value"""
+        self.volume.set(value)
+        self.volume_label.config(text=f"{value}%")
+
+    # ===== RCLONE METHODS =====
+
+    def load_rclone_config(self):
+        """Load rclone config from file"""
+        try:
+            if os.path.exists(self.rclone_config_file):
+                with open(self.rclone_config_file, 'r') as f:
+                    self.rclone_config_content = f.read()
+        except Exception as e:
+            print(f"Error loading rclone config: {e}")
+            self.rclone_config_content = None
+
+    def save_rclone_config(self, content):
+        """Save rclone config to file"""
+        try:
+            with open(self.rclone_config_file, 'w') as f:
+                f.write(content)
+            self.rclone_config_content = content
+            self.rclone_status.set("✅ Đã cấu hình rclone")
+            self.config_btn.config(text="✏️ Chỉnh sửa cấu hình")
+            return True
+        except Exception as e:
+            messagebox.showerror("Lỗi", f"Không thể lưu cấu hình:\n{e}")
+            return False
+
+    def show_rclone_config_dialog(self):
+        """Show dialog to input/edit rclone config"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Cấu hình Rclone")
+        dialog.geometry("600x500")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Header
+        header = ttk.Label(
+            dialog,
+            text="📝 Cấu hình Rclone",
+            font=("Arial", 14, "bold")
+        )
+        header.pack(pady=(10, 5))
+
+        info = ttk.Label(
+            dialog,
+            text="Dán nội dung file rclone.conf của bạn vào đây:",
+            font=("Arial", 10)
+        )
+        info.pack(pady=(0, 10))
+
+        # Example
+        example_frame = ttk.LabelFrame(dialog, text="Ví dụ:", padding="5")
+        example_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+
+        example_text = """[gdrive]
+type = drive
+scope = drive
+token = {"access_token":"...","expiry":"2025-11-06T20:11:32+07:00"}
+team_drive = """
+
+        example_label = ttk.Label(
+            example_frame,
+            text=example_text,
+            font=("Consolas", 8),
+            foreground="gray"
+        )
+        example_label.pack()
+
+        # Text area
+        text_frame = ttk.Frame(dialog)
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+
+        text_scroll = ttk.Scrollbar(text_frame)
+        text_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        config_text = tk.Text(
+            text_frame,
+            font=("Consolas", 9),
+            wrap=tk.WORD,
+            yscrollcommand=text_scroll.set
+        )
+        config_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        text_scroll.config(command=config_text.yview)
+
+        # Load existing config
+        if self.rclone_config_content:
+            config_text.insert("1.0", self.rclone_config_content)
+
+        # Buttons
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=(0, 10))
+
+        def save_config():
+            content = config_text.get("1.0", tk.END).strip()
+            if not content:
+                messagebox.showwarning("Cảnh báo", "Vui lòng nhập cấu hình rclone!")
+                return
+
+            # Basic validation
+            if '[' not in content or 'type' not in content:
+                messagebox.showwarning(
+                    "Cảnh báo",
+                    "Cấu hình không hợp lệ!\n\n"
+                    "Cấu hình rclone cần có format:\n"
+                    "[remote_name]\n"
+                    "type = ...\n"
+                    "..."
+                )
+                return
+
+            if self.save_rclone_config(content):
+                messagebox.showinfo("Thành công", "✅ Đã lưu cấu hình rclone!")
+                dialog.destroy()
+
+        ttk.Button(button_frame, text="💾 Lưu", command=save_config, style="Accent.TButton").pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="❌ Hủy", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+
+    def start_processing_with_upload(self):
+        """Start processing and upload to Drive"""
+        # Check rclone config
+        if not self.rclone_config_content:
+            if messagebox.askyesno(
+                "Chưa cấu hình rclone",
+                "Bạn chưa cấu hình rclone!\n\n"
+                "Bạn có muốn cấu hình ngay bây giờ không?"
+            ):
+                self.show_rclone_config_dialog()
+            return
+
+        # Start processing with upload flag
+        self.start_processing(upload_to_drive=True)
+
+    def start_processing(self, upload_to_drive=False):
         """Bắt đầu xử lý video"""
         # Validate inputs
         input_path = self.input_video_path.get()
@@ -439,13 +655,14 @@ class VideoCutterGUI:
             messagebox.showerror("Lỗi định dạng", f"Định dạng đoạn cắt không hợp lệ:\n\n{str(e)}")
             return
 
-        # Get processing mode and audio option
+        # Get processing mode and volume
         mode = self.processing_mode.get()
-        remove_audio = self.remove_audio.get()
+        volume = self.volume.get()
 
         # Start processing in background thread
         self.is_processing = True
         self.process_btn.config(state="disabled")
+        self.process_upload_btn.config(state="disabled")
         self.cancel_btn.config(state="normal")
         self.progress_bar.start(10)
 
@@ -454,18 +671,19 @@ class VideoCutterGUI:
             'balanced': '⚡ BALANCED MODE',
             'accurate': '🎯 ACCURATE MODE'
         }
-        audio_status = "🔇 Silent" if remove_audio else "🔊 Có âm thanh"
-        self.progress_label.config(text=f"⏳ Đang xử lý ({mode_names.get(mode, mode)} - {audio_status})...")
+        volume_status = f"🔊 {volume}%"
+        upload_status = " → 📤 Upload" if upload_to_drive else ""
+        self.progress_label.config(text=f"⏳ Đang xử lý ({mode_names.get(mode, mode)} - {volume_status}{upload_status})...")
 
         # Run in thread
         thread = threading.Thread(
             target=self.process_video,
-            args=(input_path, segments, output_path, mode, remove_audio),
+            args=(input_path, segments, output_path, mode, volume, upload_to_drive),
             daemon=True
         )
         thread.start()
 
-    def process_video(self, input_path, segments, output_path, mode, remove_audio):
+    def process_video(self, input_path, segments, output_path, mode, volume, upload_to_drive):
         """Xử lý video (chạy trong thread riêng)"""
         try:
             # Progress callback để cập nhật UI
@@ -481,12 +699,32 @@ class VideoCutterGUI:
                 temp_dir="temp_segments_gui",
                 mode=mode,
                 max_workers=None,  # Auto-detect
-                remove_audio=remove_audio,
+                volume=volume,
                 progress_callback=progress_callback
             )
 
+            # Upload to Drive if requested
+            if upload_to_drive and self.rclone_config_content:
+                self.update_progress("📤 Đang upload lên Google Drive...")
+
+                uploader = RcloneUploader(self.rclone_config_content)
+                remotes = uploader.list_remotes()
+
+                if remotes:
+                    remote_name = remotes[0]
+                    remote_path = self.remote_path.get()
+
+                    success = uploader.upload_file(output_path, remote_name, remote_path)
+
+                    if success:
+                        self.update_progress("✅ Upload hoàn thành!")
+                    else:
+                        self.update_progress("⚠️ Upload thất bại")
+                else:
+                    self.update_progress("⚠️ Không tìm thấy remote trong config")
+
             # Success
-            self.root.after(0, lambda: self.processing_complete(output_path))
+            self.root.after(0, lambda: self.processing_complete(output_path, upload_to_drive))
 
         except Exception as e:
             self.root.after(0, lambda: self.processing_error(str(e)))
@@ -495,17 +733,19 @@ class VideoCutterGUI:
         """Cập nhật progress label"""
         self.root.after(0, lambda: self.progress_label.config(text=message))
 
-    def processing_complete(self, output_path):
+    def processing_complete(self, output_path, uploaded=False):
         """Xử lý hoàn thành"""
         self.is_processing = False
         self.progress_bar.stop()
         self.progress_label.config(text="✅ Hoàn thành!")
         self.process_btn.config(state="normal")
+        self.process_upload_btn.config(state="normal")
         self.cancel_btn.config(state="disabled")
 
+        upload_msg = "\n✅ Video đã được upload lên Google Drive!" if uploaded else ""
         result = messagebox.showinfo(
             "Thành công",
-            f"✨ Video đã được cắt và lưu thành công!\n\n"
+            f"✨ Video đã được cắt và lưu thành công!{upload_msg}\n\n"
             f"📁 Vị trí: {output_path}\n\n"
             f"Bạn có muốn mở thư mục chứa file không?"
         )
@@ -526,6 +766,7 @@ class VideoCutterGUI:
         self.progress_bar.stop()
         self.progress_label.config(text="❌ Lỗi!")
         self.process_btn.config(state="normal")
+        self.process_upload_btn.config(state="normal")
         self.cancel_btn.config(state="disabled")
 
         messagebox.showerror("Lỗi", f"❌ Có lỗi xảy ra:\n\n{error_message}")
@@ -537,6 +778,7 @@ class VideoCutterGUI:
             self.progress_bar.stop()
             self.progress_label.config(text="❌ Đã hủy")
             self.process_btn.config(state="normal")
+            self.process_upload_btn.config(state="normal")
             self.cancel_btn.config(state="disabled")
 
     # ===== YOUTUBE DOWNLOAD METHODS =====
