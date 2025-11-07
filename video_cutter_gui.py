@@ -37,8 +37,24 @@ class VideoCutterGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("🎬 Video Cutter Tool - Công cụ Cắt Video")
-        self.root.geometry("800x700")
+
+        # Get screen size and set responsive window size
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # Set window size to 80% of screen, max 900x800
+        window_width = min(900, int(screen_width * 0.8))
+        window_height = min(800, int(screen_height * 0.85))
+
+        # Center window
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+
+        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
         self.root.resizable(True, True)
+
+        # Set minimum size
+        self.root.minsize(750, 600)
 
         # Variables
         self.input_video_path = tk.StringVar()
@@ -68,14 +84,66 @@ class VideoCutterGUI:
     def setup_ui(self):
         """Tạo giao diện người dùng"""
 
-        # Main container với padding
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-
-        # Configure grid weights
+        # Configure root grid
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+
+        # Create main container with canvas and scrollbar
+        container = ttk.Frame(self.root)
+        container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
+
+        # Create canvas
+        self.canvas = tk.Canvas(container, highlightthickness=0)
+        self.canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Create scrollbar
+        scrollbar = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.canvas.yview)
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Create frame inside canvas
+        main_frame = ttk.Frame(self.canvas, padding="10")
+        self.canvas_frame = self.canvas.create_window((0, 0), window=main_frame, anchor=tk.NW)
+
+        # Configure main_frame
         main_frame.columnconfigure(1, weight=1)
+
+        # Bind events for scrolling
+        def _on_frame_configure(event):
+            """Reset scroll region when frame size changes"""
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+        def _on_canvas_configure(event):
+            """Resize frame to match canvas width"""
+            canvas_width = event.width
+            self.canvas.itemconfig(self.canvas_frame, width=canvas_width)
+
+        def _on_mousewheel(event):
+            """Scroll with mousewheel"""
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def _on_enter(event):
+            """Bind mousewheel when mouse enters"""
+            if sys.platform == "win32":
+                self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            else:
+                self.canvas.bind_all("<Button-4>", lambda e: self.canvas.yview_scroll(-1, "units"))
+                self.canvas.bind_all("<Button-5>", lambda e: self.canvas.yview_scroll(1, "units"))
+
+        def _on_leave(event):
+            """Unbind mousewheel when mouse leaves"""
+            if sys.platform == "win32":
+                self.canvas.unbind_all("<MouseWheel>")
+            else:
+                self.canvas.unbind_all("<Button-4>")
+                self.canvas.unbind_all("<Button-5>")
+
+        main_frame.bind("<Configure>", _on_frame_configure)
+        self.canvas.bind("<Configure>", _on_canvas_configure)
+        self.canvas.bind("<Enter>", _on_enter)
+        self.canvas.bind("<Leave>", _on_leave)
 
         # ===== HEADER =====
         header_frame = ttk.Frame(main_frame)
@@ -879,15 +947,6 @@ def main():
     """Main function"""
     root = tk.Tk()
     app = VideoCutterGUI(root)
-
-    # Center window
-    root.update_idletasks()
-    width = root.winfo_width()
-    height = root.winfo_height()
-    x = (root.winfo_screenwidth() // 2) - (width // 2)
-    y = (root.winfo_screenheight() // 2) - (height // 2)
-    root.geometry(f'{width}x{height}+{x}+{y}')
-
     root.mainloop()
 
 
