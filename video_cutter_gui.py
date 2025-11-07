@@ -792,14 +792,15 @@ team_drive = """
                     self.update_progress("⚠️ Không tìm thấy remote trong config")
 
             # Success
-            self.root.after(0, lambda: self.processing_complete(output_path, upload_to_drive))
+            self.root.after(0, lambda path=output_path, uploaded=upload_to_drive: self.processing_complete(path, uploaded))
 
         except Exception as e:
-            self.root.after(0, lambda: self.processing_error(str(e)))
+            error_msg = str(e)
+            self.root.after(0, lambda msg=error_msg: self.processing_error(msg))
 
     def update_progress(self, message):
         """Cập nhật progress label"""
-        self.root.after(0, lambda: self.progress_label.config(text=message))
+        self.root.after(0, lambda msg=message: self.progress_label.config(text=msg))
 
     def processing_complete(self, output_path, uploaded=False):
         """Xử lý hoàn thành"""
@@ -888,7 +889,7 @@ team_drive = """
         try:
             def progress_callback(message):
                 if self.is_downloading:
-                    self.root.after(0, lambda: self.youtube_status.set(message))
+                    self.root.after(0, lambda msg=message: self.youtube_status.set(msg))
 
             success, file_path = self.youtube_downloader.download_video(
                 url,
@@ -896,12 +897,13 @@ team_drive = """
             )
 
             if success and file_path:
-                self.root.after(0, lambda: self.youtube_download_complete(file_path))
+                self.root.after(0, lambda path=file_path: self.youtube_download_complete(path))
             else:
                 self.root.after(0, lambda: self.youtube_download_error("Tải xuống thất bại"))
 
         except Exception as e:
-            self.root.after(0, lambda: self.youtube_download_error(str(e)))
+            error_msg = str(e)
+            self.root.after(0, lambda msg=error_msg: self.youtube_download_error(msg))
 
     def youtube_download_complete(self, file_path):
         """Xử lý khi tải YouTube hoàn thành"""
