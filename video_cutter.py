@@ -202,7 +202,7 @@ def cut_video_segments(input_video: str, segments: List[Tuple[float, float]],
     log(f"\n🎬 Bắt đầu cắt video từ: {input_video}")
     log(f"📊 Tổng số đoạn cần cắt: {len(segments)}")
     log(f"⚙️  Chế độ: {mode_info.get(mode, mode)}")
-    log(f"🔊 Âm thanh: {'Tắt (Silent)' if remove_audio else 'Bật (Giữ nguyên)'}\n")
+    log(f"🔊 Âm lượng: {volume}% {'(Tắt)' if volume == 0 else ''}\n")
 
     segment_files = []
     total_duration = sum(end - start for start, end in segments)
@@ -375,7 +375,7 @@ Chế độ xử lý (--mode):
             temp_dir=args.temp_dir,
             mode=args.mode,
             max_workers=args.workers,
-            remove_audio=args.no_audio
+            volume=0 if args.no_audio else 100
         )
 
     except Exception as e:
